@@ -35,20 +35,25 @@ def scan(prologue, demo_io, tick=None):
 
     try:
       p, m = next(iter_bootstrap)
-      item = (p, d_io.parse(p.kind, p.compressed, m))
+      if m:
+        item = (p, d_io.parse(p.kind, p.compressed, m))
 
       while True:
-        if p.kind == pb_d.DEM_FullPacket:
-          full_packets.append(item)
-          remaining_packets = []
-        else:
-          remaining_packets.append(item)
+        if item:
+            if p.kind == pb_d.DEM_FullPacket:
+              full_packets.append(item)
+              remaining_packets = []
+            else:
+              remaining_packets.append(item)
 
         if p.tick >= tick:
           break
 
         p, m = next(iter_bootstrap)
-        item = (p, d_io.parse(p.kind, p.compressed, m))
+        if m:
+            item = (p, d_io.parse(p.kind, p.compressed, m))
+        else:
+            item = None
     except StopIteration:
       raise EOFError()
 
@@ -126,45 +131,46 @@ class Stream(object):
 
     while True:
       peek, message = next(iter_entries)
+      if message:
+          if peek.kind == pb_d.DEM_FullPacket:
+            continue
+          elif peek.kind == pb_d.DEM_Stop:
+            raise StopIteration()
+          else:
+            pbmsg = d_io.parse(peek.kind, peek.compressed, message)
+            self.advance(peek.tick, pbmsg)
 
-      if peek.kind == pb_d.DEM_FullPacket:
-        continue
-      elif peek.kind == pb_d.DEM_Stop:
-        raise StopIteration()
-      else:
-        pbmsg = d_io.parse(peek.kind, peek.compressed, message)
-        self.advance(peek.tick, pbmsg)
-
-      t = self.tick
-      um, ge = self.user_messages, self.game_events
-      w, m = self.world, self.modifiers
-      yield [t, um, ge, w, m]
+          t = self.tick
+          um, ge = self.user_messages, self.game_events
+          w, m = self.world, self.modifiers
+          yield [t, um, ge, w, m]
 
   def iterfullticks(self):
     iter_entries = iter(self.demo_io)
 
     while True:
       peek, message = next(iter_entries)
+      if message:
+          if peek.kind == pb_d.DEM_Stop:
+            raise StopIteration()
+          elif peek.kind != pb_d.DEM_FullPacket:
+            continue
 
-      if peek.kind == pb_d.DEM_Stop:
-        raise StopIteration()
-      elif peek.kind != pb_d.DEM_FullPacket:
-        continue
+          pro = self.prologue
 
-      pro = self.prologue
-
-      full_packet = (peek, d_io.parse(peek.kind, peek.compressed, message))
-      self.world, self.modifiers, self.string_tables = reconstitute(
-        [full_packet], pro.class_bits, pro.recv_tables, self.string_tables)
-      self.tick = peek.tick
-      self.user_messages = []
-      self.game_events = []
-      yield [self.tick, self.user_messages, self.game_events, self.world,
-             self.modifiers]
+          full_packet = (peek, d_io.parse(peek.kind, peek.compressed, message))
+          self.world, self.modifiers, self.string_tables = reconstitute(
+            [full_packet], pro.class_bits, pro.recv_tables, self.string_tables)
+          self.tick = peek.tick
+          self.user_messages = []
+          self.game_events = []
+          yield [self.tick, self.user_messages, self.game_events, self.world,
+                 self.modifiers]
 
   def advance(self, tick, pbmsg):
     self.tick = tick
-
+    if not hasattr(pbmsg, "data"):
+        return
     packet = ie_packet.construct(p_io.construct(pbmsg.data))
     am_entries = []
 

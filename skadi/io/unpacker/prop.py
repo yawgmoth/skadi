@@ -155,9 +155,14 @@ class Unpacker(unpacker.Unpacker):
     return elements
 
   def _unpack_int64(self, flags, num_bits):
+    #if flags & Flag.EncodedAgainstTickcount:
+      #raise NotImplementedError('int64 cant be encoded against tickcount')
     if flags & Flag.EncodedAgainstTickcount:
-      raise NotImplementedError('int64 cant be encoded against tickcount')
-
+      if flags & Flag.Unsigned:
+        return self.bitstream.read_varint()
+      else:
+        value = self.bitstream.read_varint()
+        return (-(value & 1)) ^ (value >> 1)
     negate = False
     second_bits = num_bits - 32
 

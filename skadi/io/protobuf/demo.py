@@ -54,7 +54,7 @@ class DemoIO(protobuf.ProtobufIO):
       message = self.io.read(size)
     else:
       # TODO: log here.
-      print 'unknown kind {}'.format(kind)
+      #print 'unknown kind {}'.format(kind)
       message = None
       self.io.read(size)
 
